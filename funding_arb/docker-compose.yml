@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  ib-gateway:
+    image: ghcr.io/gnzsnz/ib-gateway:latest
+    container_name: ib_gateway_paper
+    restart: always # 如果崩溃了自动重启
+    environment:
+      - TWS_USERID=${IB_USER}
+      - TWS_PASSWORD=${IB_PASSWORD}
+      - TRADING_MODE=${TRADING_MODE}
+      - TWS_ACCEPT_INCOMING=127.0.0.1 # 出于安全，只允许本地连接
+      - TWOFA_TIMEOUT_ACTION=exit # 对于纸盘，不需要双重认证
+    ports:
+      - "4002:4002" # 暴露 4002 端口供你的 Python 脚本连接
+    volumes:
+      - ./ib_config:/root/Jts # 将配置挂载到本地，防止重启后配置丢失
