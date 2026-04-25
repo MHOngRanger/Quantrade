@@ -19,6 +19,7 @@ from __future__ import annotations
 import calendar
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import math
 
 # ib_insync 是可选依赖，按需安装
 try:
@@ -30,17 +31,29 @@ except ImportError:
 
 # ── ETF/股票到期权根代码映射 ─────────────────────────────
 TICKER_MAP = {
-    "SPYUSDT":   "SPY",
-    "QQQUSDT":   "QQQ",
-    "TSLAUSDT":  "TSLA",
-    "NVDAUSDT":  "NVDA",
-    "METAUSDT":  "META",
-    "GOOGLUSDT": "GOOGL",
-    "AMZNUSDT":  "AMZN",
-    "TSMUSDT":   "TSM",
-    "MSTRUSDT":  "MSTR",
-    "COINUSDT":  "COIN",
     "AAPLUSDT":  "AAPL",
+    "AMZNUSDT":  "AMZN",
+    "AVGOUSDT":  "AVGO",
+    "BABAUSDT":  "BABA",
+    "COINUSDT":  "COIN",
+    "CRCLUSDT":  "CRCL",
+    "EWJUSDT":   "EWJ",
+    "EWYUSDT":   "EWY",
+    "GOOGLUSDT": "GOOGL",
+    "HOODUSDT":  "HOOD",
+    "INTCUSDT":  "INTC",
+    "METAUSDT":  "META",
+    "MSFTUSDT":  "MSFT",
+    "MSTRUSDT":  "MSTR",
+    "MUUSDT":    "MU",
+    "NVDAUSDT":  "NVDA",
+    "PAYPUSDT":  "PYPL",
+    "PLTRUSDT":  "PLTR",
+    "QQQUSDT":   "QQQ",
+    "SNDKUSDT":  "SNDK",
+    "SPYUSDT":   "SPY",
+    "TSLAUSDT":  "TSLA",
+    "TSMUSDT":   "TSM",
 }
 
 
@@ -98,14 +111,41 @@ class IBKRExecutor:
         raise ValueError("无法找到合适到期日")
 
     def _get_atm_strike(self, symbol: str) -> float:
-        """获取当前市价并四舍五入到最近行权价（SPY/QQQ 以1美元为档）"""
+        return self._get_atm_strike_with_fallback(symbol)
+
+    def _get_atm_strike_with_fallback(
+        self,
+        symbol: str,
+        reference_price: float | None = None,
+    ) -> float:
+        """获取当前市价并四舍五入到最近行权价（SPY/QQQ 以1美元为档）。"""
         contract = Contract(symbol=symbol, secType="STK", exchange="SMART", currency="USD")
         self.ib.qualifyContracts(contract)
+
+        # Paper 账户常见情况是没有实时行情权限；先请求 delayed 数据，仍失败再用传入参考价。
+        try:
+            self.ib.reqMarketDataType(3)
+        except Exception:
+            pass
+
         ticker = self.ib.reqMktData(contract, "", False, False)
         self.ib.sleep(1)
-        price = ticker.last or ticker.close or ticker.bid
-        if not price:
-            raise ValueError(f"无法获取 {symbol} 市价")
+
+        candidates = [
+            ticker.marketPrice(),
+            ticker.last,
+            ticker.close,
+            ticker.bid,
+            ticker.ask,
+            reference_price,
+        ]
+        price = next(
+            (float(p) for p in candidates if p is not None and math.isfinite(float(p)) and float(p) > 0),
+            None,
+        )
+        if price is None:
+            raise ValueError(f"无法获取 {symbol} 有效市价；可检查 IBKR 行情权限或传入 reference_price")
+
         # SPY/QQQ 期权行权价间距为1美元，其他为2.5或5美元
         step = 1.0 if symbol in ("SPY", "QQQ") else 2.5
         return round(price / step) * step
@@ -118,6 +158,7 @@ class IBKRExecutor:
         direction: int,
         notional_usd: float,
         dry_run: bool = True,
+        reference_price: float | None = None,
     ) -> SyntheticPosition | None:
         """
         开立合成期权头寸（对冲 Binance 永续的 Delta）。
@@ -136,7 +177,7 @@ class IBKRExecutor:
         if not ticker:
             raise ValueError(f"未找到 {binance_symbol} 对应的期权标的")
 
-        strike  = self._get_atm_strike(ticker)
+        strike  = self._get_atm_strike_with_fallback(ticker, reference_price=reference_price)
         expiry  = self._next_monthly_expiry()
         n_contr = max(1, int(notional_usd / (strike * 100)))
 

@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-针对 **Binance TradFi 永续合约**（11 只美股类合约）的 Delta 中性资金费率套利策略。
+针对 **Binance TradFi USDT 永续合约**（当前 31 只 TradFi 合约，其中 23 只股票/ETF可接 IBKR 合成期权腿）的 Delta 中性资金费率套利策略。
 
 - **Binance 腿**：永续合约方向随费率符号动态调整（正费率→空永续；负费率→多永续）
 - **IBKR 腿**：合成期权对冲 Delta（ATM Call/Put，最近月到期，Portfolio Margin）
@@ -12,17 +12,37 @@
 
 | Binance | IBKR | 类型 |
 |---|---|---|
-| SPYUSDT | SPY | ETF |
-| QQQUSDT | QQQ | ETF |
-| TSLAUSDT | TSLA | 个股 |
-| NVDAUSDT | NVDA | 个股 |
-| METAUSDT | META | 个股 |
-| GOOGLUSDT | GOOGL | 个股 |
-| AMZNUSDT | AMZN | 个股 |
-| TSMUSDT | TSM | 个股 |
-| MSTRUSDT | MSTR | 个股 |
-| COINUSDT | COIN | 个股 |
 | AAPLUSDT | AAPL | 个股 |
+| AMZNUSDT | AMZN | 个股 |
+| AVGOUSDT | AVGO | 个股 |
+| BABAUSDT | BABA | 个股 |
+| COINUSDT | COIN | 个股 |
+| CRCLUSDT | CRCL | 个股 |
+| EWJUSDT | EWJ | ETF |
+| EWYUSDT | EWY | ETF |
+| GOOGLUSDT | GOOGL | 个股 |
+| HOODUSDT | HOOD | 个股 |
+| INTCUSDT | INTC | 个股 |
+| METAUSDT | META | 个股 |
+| MSFTUSDT | MSFT | 个股 |
+| MSTRUSDT | MSTR | 个股 |
+| MUUSDT | MU | 个股 |
+| NVDAUSDT | NVDA | 个股 |
+| PAYPUSDT | PYPL | 个股 |
+| PLTRUSDT | PLTR | 个股 |
+| QQQUSDT | QQQ | ETF |
+| SNDKUSDT | SNDK | 个股 |
+| SPYUSDT | SPY | ETF |
+| TSLAUSDT | TSLA | 个股 |
+| TSMUSDT | TSM | 个股 |
+| BZUSDT | Binance-only | 商品 |
+| CLUSDT | Binance-only | 商品 |
+| COPPERUSDT | Binance-only | 商品 |
+| NATGASUSDT | Binance-only | 商品 |
+| XAGUSDT | Binance-only | 商品 |
+| XAUUSDT | Binance-only | 商品 |
+| XPDUSDT | Binance-only | 商品 |
+| XPTUSDT | Binance-only | 商品 |
 
 ## 项目结构
 

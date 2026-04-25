@@ -35,6 +35,10 @@ class ManagedPosition:
     opened_at: str
     opened_rate_ann: float
     signal_weight: float
+    # Binance 腿信息
+    binance_order_id: int | None = None
+    binance_quantity: float | None = None
+    binance_side: str | None = None        # BUY / SELL
 
     def to_synthetic(self) -> SyntheticPosition:
         return SyntheticPosition(
@@ -117,6 +121,18 @@ class PlannedAction:
         if self.kind == "skip":
             return f"[跳过] {label}  冷却至 {self.cooldown_until}  原因={self.reason}"
         return f"[{self.kind}] {label}  原因={self.reason}"
+
+
+def binance_position_amt(direction: int, quantity: float | None) -> float | None:
+    """
+    将策略方向转换为 Binance 持仓数量符号。
+
+    direction=+1 表示正费率、做空永续，所以 Binance positionAmt 为负；
+    direction=-1 表示负费率、做多永续，所以 Binance positionAmt 为正。
+    """
+    if quantity is None:
+        return None
+    return -abs(float(quantity)) if direction > 0 else abs(float(quantity))
 
 
 def default_state_path() -> Path:
@@ -238,6 +254,38 @@ def record_open(
     )
 
 
+def record_open_binance(
+    state: PaperState,
+    *,
+    symbol: str,
+    direction: int,
+    notional_usd: float,
+    opened_at: datetime,
+    opened_rate_ann: float,
+    signal_weight: float,
+    binance_order_id: int | None = None,
+    binance_quantity: float | None = None,
+    binance_side: str | None = None,
+) -> None:
+    """记录仅 Binance 腿仓位，便于后续按信号平仓/冷却。"""
+    state.cooldowns.pop(symbol, None)
+    state.positions[symbol] = ManagedPosition(
+        binance_symbol=symbol,
+        ibkr_symbol=TICKER_MAP.get(symbol, symbol.replace("USDT", "")),
+        direction=direction,
+        strike=0.0,
+        expiry="",
+        contracts=0,
+        notional_usd=float(notional_usd),
+        opened_at=opened_at.astimezone(timezone.utc).isoformat(),
+        opened_rate_ann=float(opened_rate_ann),
+        signal_weight=float(signal_weight),
+        binance_order_id=binance_order_id,
+        binance_quantity=binance_quantity,
+        binance_side=binance_side,
+    )
+
+
 def record_close(
     state: PaperState,
     *,
@@ -258,11 +306,16 @@ def summarize_state(state: PaperState, now: datetime) -> str:
         lines.append("当前本地仓位：")
         for symbol, pos in sorted(state.positions.items()):
             label = symbol.replace("USDT", "")
-            side = "合成多头" if pos.direction > 0 else "合成空头"
-            lines.append(
-                f"  {label:8s} {side:6s}  {pos.contracts}张  "
-                f"strike={pos.strike:.2f}  expiry={pos.expiry}  名义={pos.notional_usd:,.0f}"
-            )
+            if pos.contracts > 0:
+                side = "合成多头" if pos.direction > 0 else "合成空头"
+                lines.append(
+                    f"  {label:8s} {side:6s}  {pos.contracts}张  "
+                    f"strike={pos.strike:.2f}  expiry={pos.expiry}  名义={pos.notional_usd:,.0f}"
+                )
+            else:
+                perp_side = "空永续" if pos.direction > 0 else "多永续"
+                qty = "" if pos.binance_quantity is None else f" qty={pos.binance_quantity:g}"
+                lines.append(f"  {label:8s} Binance-{perp_side:4s}{qty}  名义={pos.notional_usd:,.0f}")
     else:
         lines.append("当前本地仓位：无")
 

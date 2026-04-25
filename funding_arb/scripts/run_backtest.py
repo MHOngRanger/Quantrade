@@ -5,6 +5,7 @@
   uv run python scripts/run_backtest.py
   uv run python scripts/run_backtest.py --refresh
   uv run python scripts/run_backtest.py --threshold 0.00015 --leverage 4
+  uv run python scripts/run_backtest.py --binance-only
 """
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src.backtest.binance_leg import run_binance_leg, sensitivity_binance_leg
 from src.backtest.engine import run, sensitivity
 from src.backtest.metrics import print_summary
 from src.data.binance import load_all
@@ -45,6 +47,7 @@ def main() -> None:
     parser.add_argument("--track-err-std", type=float, default=0.001, help="Delta 追踪误差标准差")
     parser.add_argument("--seed", type=int, default=42, help="随机种子")
     parser.add_argument("--skip-sensitivity", action="store_true", help="跳过敏感性分析")
+    parser.add_argument("--binance-only", action="store_true", help="只回测 Binance 永续资金费腿")
     args = parser.parse_args()
 
     wide = load_all(refresh=args.refresh)
@@ -53,37 +56,55 @@ def main() -> None:
 
     _describe_panel(wide)
 
-    equity, trades = run(
-        wide,
-        threshold=args.threshold,
-        max_leverage=args.leverage,
-        track_err_std=args.track_err_std,
-        seed=args.seed,
-    )
+    if args.binance_only:
+        equity, trades = run_binance_leg(
+            wide,
+            threshold=args.threshold,
+            max_leverage=args.leverage,
+        )
+    else:
+        equity, trades = run(
+            wide,
+            threshold=args.threshold,
+            max_leverage=args.leverage,
+            track_err_std=args.track_err_std,
+            seed=args.seed,
+        )
 
     print("\n主回测")
-    print_summary(equity, label="all_sample")
-    print(f"开仓/换向次数: {len(trades)}")
+    print_summary(equity, label="binance_leg" if args.binance_only else "all_sample")
+    print(f"交易事件数: {len(trades)}")
 
     if not trades.empty:
         print("\n最高年化费率交易")
-        top = trades.reindex(trades["rate_ann"].abs().sort_values(ascending=False).index).head(10)
+        ranked = trades.dropna(subset=["rate_ann"])
+        top = ranked.reindex(ranked["rate_ann"].abs().sort_values(ascending=False).index).head(10)
+        cols = [
+            col for col in ["ts", "symbol", "event", "direction", "rate_ann", "notional", "open_cost", "fee"]
+            if col in top.columns
+        ]
         print(
-            top[["ts", "symbol", "event", "direction", "rate_ann", "notional", "open_cost"]]
-            .to_string(index=False)
+            top[cols].to_string(index=False)
         )
 
     if args.skip_sensitivity:
         return
 
     print("\n敏感性分析")
-    sens = sensitivity(
-        wide,
-        thresholds=[0.00005, 0.0001, 0.00015, 0.0002],
-        leverages=[3.0, 4.0, 5.0],
-        track_err_std=args.track_err_std,
-        seed=args.seed,
-    )
+    if args.binance_only:
+        sens = sensitivity_binance_leg(
+            wide,
+            thresholds=[0.00005, 0.0001, 0.00015, 0.0002],
+            leverages=[3.0, 4.0, 5.0],
+        )
+    else:
+        sens = sensitivity(
+            wide,
+            thresholds=[0.00005, 0.0001, 0.00015, 0.0002],
+            leverages=[3.0, 4.0, 5.0],
+            track_err_std=args.track_err_std,
+            seed=args.seed,
+        )
     sens = sens.sort_values(["ann_ret_%", "sharpe"], ascending=False)
     print(sens.head(12).to_string(index=False))
 

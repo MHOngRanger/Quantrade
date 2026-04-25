@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from ..data.binance import fetch_current_rates, EQUITY_SYMBOLS
+from ..data.binance import fetch_current_rates, TRADFI_SYMBOLS
 from ..signal.generator import generate, format_signals
 
 _SNAPSHOT_PATH = Path(__file__).parent.parent.parent / "data" / "last_snapshot.json"
@@ -27,7 +27,7 @@ def scan(
         snapshot dict with keys: ts, signals, rates
     """
     now = datetime.now(timezone.utc)
-    rates_df = fetch_current_rates(EQUITY_SYMBOLS)
+    rates_df = fetch_current_rates(TRADFI_SYMBOLS)
 
     # 构造单行宽表供 signal generator 使用
     wide_now = rates_df["current_rate"].to_frame().T

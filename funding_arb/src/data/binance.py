@@ -3,7 +3,7 @@ Binance TradFi 永续合约资金费率数据层。
 
 改进点：
 - 历史 funding 使用 Session + retry，减少瞬时网络失败
-- `load_all()` 并发拉取，避免 11 个合约串行阻塞
+- `load_all()` 并发拉取，避免 TradFi 合约串行阻塞
 - 缓存增量更新时保留重叠窗口，避免边界重复/漏数
 - 实时费率通过一次 `premiumIndex` 批量请求完成
 - 将毫秒抖动统一到整秒，并过滤到项目使用的 8h 结算栅格
@@ -20,20 +20,49 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-# Binance 上线的全部 EQUITY 类永续合约
-EQUITY_SYMBOLS = [
-    "TSLAUSDT",
-    "MSTRUSDT",
-    "AMZNUSDT",
-    "COINUSDT",
-    "METAUSDT",
-    "NVDAUSDT",
-    "GOOGLUSDT",
-    "QQQUSDT",
-    "SPYUSDT",
+# Binance USDⓈ-M 当前上线的全部 TradFi USDT 永续合约。
+# 来源：/fapi/v1/exchangeInfo, contractType=TRADIFI_PERPETUAL, status=TRADING。
+TRADFI_EQUITY_SYMBOLS = [
     "AAPLUSDT",
+    "AMZNUSDT",
+    "AVGOUSDT",
+    "BABAUSDT",
+    "COINUSDT",
+    "CRCLUSDT",
+    "EWJUSDT",
+    "EWYUSDT",
+    "GOOGLUSDT",
+    "HOODUSDT",
+    "INTCUSDT",
+    "METAUSDT",
+    "MSFTUSDT",
+    "MSTRUSDT",
+    "MUUSDT",
+    "NVDAUSDT",
+    "PAYPUSDT",
+    "PLTRUSDT",
+    "QQQUSDT",
+    "SNDKUSDT",
+    "SPYUSDT",
+    "TSLAUSDT",
     "TSMUSDT",
 ]
+
+TRADFI_COMMODITY_SYMBOLS = [
+    "BZUSDT",
+    "CLUSDT",
+    "COPPERUSDT",
+    "NATGASUSDT",
+    "XAGUSDT",
+    "XAUUSDT",
+    "XPDUSDT",
+    "XPTUSDT",
+]
+
+TRADFI_SYMBOLS = TRADFI_EQUITY_SYMBOLS + TRADFI_COMMODITY_SYMBOLS
+
+# Backward-compatible equity-only alias. Signal pool uses TRADFI_SYMBOLS.
+EQUITY_SYMBOLS = TRADFI_EQUITY_SYMBOLS
 
 _BASE = "https://fapi.binance.com/fapi/v1"
 _CACHE_DIR = Path(__file__).parent.parent.parent / "data"
@@ -203,7 +232,7 @@ def fetch_current_rates(symbols: list[str] | None = None) -> pd.DataFrame:
         DataFrame with columns:
         symbol, mark_price, current_rate, next_rate, next_funding_time, current_ann, next_ann
     """
-    syms = symbols or EQUITY_SYMBOLS
+    syms = symbols or TRADFI_SYMBOLS
     wanted = set(syms)
     payload = _request_json("premiumIndex")
 
@@ -302,7 +331,7 @@ def load_all(
     - 保留缺失值 NaN，避免把“未上市/无数据”伪造成费率 0
     - 通过并发加载缩短全量刷新时间
     """
-    syms = symbols or EQUITY_SYMBOLS
+    syms = symbols or TRADFI_SYMBOLS
     workers = max_workers or min(8, len(syms))
     series_map: dict[str, pd.Series] = {}
 
