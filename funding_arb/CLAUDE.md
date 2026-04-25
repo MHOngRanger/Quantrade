@@ -123,9 +123,16 @@ uv run python -c "from src.data.binance import load_all; load_all(refresh=True)"
 
 1. 需要 IBKR Portfolio Margin 账户（最低净值 $110,000）
 2. 先在 Paper Trading 账户测试
-3. TWS 或 IB Gateway 需在本地运行（默认 port 7497 for paper, 7496 for live）
+3. TWS 或 IB Gateway 需在本地运行（当前 Docker 默认 port 4004 for paper, 4003 for live）
 4. 安装 `ib_insync`：`uv add ib_insync`
 5. 安装 `apscheduler`（监控脚本用）：`uv add apscheduler`
+
+## 环境绑定规则
+
+- Binance Testnet 始终对应 IBKR Paper
+- Binance Production 始终对应 IBKR Live
+- 不允许 Binance Testnet + IBKR Live，或 Binance Production + IBKR Paper
+- `scripts/monitor_loop.py` 会在启动时校验该组合并阻止错误环境执行
 
 ## 回测结果摘要（2026-01 上线至今）
 

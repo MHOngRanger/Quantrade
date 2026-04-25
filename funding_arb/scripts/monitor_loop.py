@@ -7,6 +7,10 @@
   uv run python scripts/monitor_loop.py --once --execute       # 双腿自动执行（dry_run）
   uv run python scripts/monitor_loop.py --once --execute --no-dry-run   # 真实下单
   uv run python scripts/monitor_loop.py --once --execute --binance-only # 仅 Binance 腿
+
+环境绑定规则：
+  - Binance Testnet 必须对应 IBKR Paper
+  - Binance Production 必须对应 IBKR Live
 """
 import argparse
 import os
@@ -48,6 +52,17 @@ def _load_env() -> None:
             os.environ.setdefault(key.strip(), value.strip())
 
 
+def _validate_environment_pair(*, binance_testnet: bool, account_mode: str) -> None:
+    """防止 Binance testnet/live 与 IBKR paper/live 混用。"""
+    expected_mode = "paper" if binance_testnet else "live"
+    if account_mode != expected_mode:
+        binance_label = "Testnet" if binance_testnet else "Production"
+        raise SystemExit(
+            f"环境组合错误：Binance {binance_label} 必须对应 IBKR {expected_mode}。"
+            f" 当前 IBKR={account_mode}。"
+        )
+
+
 def run_once(
     *,
     threshold: float = 0.0001,
@@ -63,6 +78,8 @@ def run_once(
     binance_testnet: bool = True,
     leverage: int = 5,
 ) -> None:
+    _validate_environment_pair(binance_testnet=binance_testnet, account_mode=account_mode)
+
     now = datetime.now(timezone.utc)
     prev = load_last_snapshot()
     curr = scan(threshold=threshold, verbose=True)
@@ -295,7 +312,7 @@ def main() -> None:
     parser.add_argument("--cooldown-hours", type=float, default=16.0, help="平仓后冷却时长")
     parser.add_argument("--client-id", type=int, default=10, help="IBKR API client id")
     parser.add_argument("--ibkr-port", type=int, default=None, help="手动指定 IBKR API 端口")
-    parser.add_argument("--live",      action="store_true", help="连接 live 端口（默认 paper）")
+    parser.add_argument("--live",      action="store_true", help="IBKR live 模式（默认 paper；必须配合 --binance-live）")
     parser.add_argument("--binance-only", action="store_true", help="仅执行 Binance 腿")
     parser.add_argument("--binance-live", action="store_true", help="使用 Binance 生产环境（默认 Testnet）")
     parser.add_argument("--state-path", type=Path, default=default_state_path(), help="本地状态文件路径")
@@ -303,6 +320,8 @@ def main() -> None:
     ibkr_port = args.ibkr_port or (4003 if args.live else 4004)
     account_mode = "live" if args.live else "paper"
     dry_run = not args.no_dry_run
+    binance_testnet = not args.binance_live
+    _validate_environment_pair(binance_testnet=binance_testnet, account_mode=account_mode)
 
     common_kwargs = dict(
         threshold=args.threshold,
@@ -315,7 +334,7 @@ def main() -> None:
         state_path=args.state_path,
         account_mode=account_mode,
         binance_only=args.binance_only,
-        binance_testnet=not args.binance_live,
+        binance_testnet=binance_testnet,
         leverage=args.leverage,
     )
 
