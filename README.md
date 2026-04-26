@@ -17,6 +17,10 @@ Quantrade/
 ├── main.py                         # Placeholder root entry
 ├── notebooks/                      # General strategy research notebooks
 ├── pyproject.toml                  # Root Python project config
+├── pairs_trading/                  # Statistical arbitrage subproject
+├── momentum/                       # Cross-sectional momentum subproject
+├── seasonality/                    # Calendar-effect research subproject
+├── market_making/                  # Avellaneda-Stoikov simulation subproject
 └── funding_arb/                    # Funding-rate arbitrage subproject
     ├── scripts/                    # Runnable command-line entry points
     ├── src/                        # Core source code
@@ -24,6 +28,32 @@ Quantrade/
     ├── data/                       # Local caches and runtime state
     ├── pyproject.toml              # Subproject dependencies
     └── bluemap.md                  # Longer-term production architecture plan
+```
+
+## Strategy Subprojects
+
+The root notebooks are now mirrored by standalone subproject directories:
+
+```text
+pairs_trading/
+    Statistical arbitrage framework: data download, cointegration screening,
+    z-score signals, and pair backtesting.
+
+momentum/
+    Cross-sectional momentum framework: monthly data, 12-1 momentum signals,
+    quantile portfolios, and monthly rebalancing.
+
+seasonality/
+    Calendar-effect research framework: month-of-year, day-of-week,
+    turn-of-month, and sell-in-May summaries.
+
+funding_arb/
+    Binance TradFi funding-rate arbitrage framework with backtesting,
+    monitoring, paper state, and optional execution.
+
+market_making/
+    Avellaneda-Stoikov market-making framework: quote model, fill simulation,
+    inventory tracking, and PnL metrics.
 ```
 
 ## Core Subproject: `funding_arb`

@@ -1,0 +1,2 @@
+"""Calendar seasonality research package."""
+

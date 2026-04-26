@@ -1,0 +1,2 @@
+"""Pairs trading strategy package."""
+
