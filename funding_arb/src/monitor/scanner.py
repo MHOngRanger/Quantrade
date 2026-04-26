@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from ..data.binance import fetch_current_rates, TRADFI_SYMBOLS
+from ..data.binance import fetch_current_rates, fetch_current_rates_async, TRADFI_SYMBOLS
 from ..signal.generator import generate, format_signals
 
 _SNAPSHOT_PATH = Path(__file__).parent.parent.parent / "data" / "last_snapshot.json"
@@ -28,6 +28,31 @@ def scan(
     """
     now = datetime.now(timezone.utc)
     rates_df = fetch_current_rates(TRADFI_SYMBOLS)
+    return _build_snapshot(now=now, rates_df=rates_df, threshold=threshold, verbose=verbose)
+
+
+async def scan_async(
+    threshold: float = 0.0001,
+    verbose: bool = True,
+) -> dict:
+    """
+    异步拉取实时费率 → 生成信号 → 输出快照。
+
+    用在监控 loop 或其他 asyncio 应用中，避免 HTTP 等待阻塞事件循环。
+    """
+    now = datetime.now(timezone.utc)
+    rates_df = await fetch_current_rates_async(TRADFI_SYMBOLS)
+    return _build_snapshot(now=now, rates_df=rates_df, threshold=threshold, verbose=verbose)
+
+
+def _build_snapshot(
+    *,
+    now: datetime,
+    rates_df: pd.DataFrame,
+    threshold: float,
+    verbose: bool,
+) -> dict:
+    """从费率 DataFrame 构造信号快照，并写入本地状态文件。"""
 
     # 构造单行宽表供 signal generator 使用
     wide_now = rates_df["current_rate"].to_frame().T

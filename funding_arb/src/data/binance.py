@@ -10,11 +10,13 @@ Binance TradFi 永续合约资金费率数据层。
 """
 from __future__ import annotations
 
+import asyncio
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
+import aiohttp
 import pandas as pd
 import requests
 from requests.adapters import HTTPAdapter
@@ -70,6 +72,7 @@ _HISTORY_START = datetime(2026, 1, 1, tzinfo=timezone.utc)
 _SETTLEMENT_FREQ = "8h"
 _CACHE_OVERLAP_ROWS = 3
 _REQUEST_TIMEOUT = (5, 20)
+_ASYNC_RETRY_STATUSES = {429, 500, 502, 503, 504}
 
 
 def _build_session() -> requests.Session:
@@ -112,6 +115,56 @@ def _request_json(
     if isinstance(payload, dict) and payload.get("code") not in (None, 200):
         raise RuntimeError(f"Binance API error: {payload}")
     return payload
+
+
+def _build_async_timeout() -> aiohttp.ClientTimeout:
+    connect, read = _REQUEST_TIMEOUT
+    return aiohttp.ClientTimeout(sock_connect=connect, sock_read=read)
+
+
+async def _request_json_async(
+    path: str,
+    params: dict | None = None,
+    session: aiohttp.ClientSession | None = None,
+) -> list[dict] | dict:
+    owns_session = session is None
+    session = session or aiohttp.ClientSession(
+        timeout=_build_async_timeout(),
+        headers={"User-Agent": "funding-arb/0.1"},
+    )
+
+    url = f"{_BASE}/{path}"
+    last_exc: Exception | None = None
+    try:
+        for attempt in range(5):
+            try:
+                async with session.get(url, params=params) as resp:
+                    if resp.status in _ASYNC_RETRY_STATUSES and attempt < 4:
+                        await asyncio.sleep(0.35 * (2 ** attempt))
+                        continue
+                    resp.raise_for_status()
+                    payload = await resp.json()
+
+                if isinstance(payload, dict) and payload.get("code") not in (None, 200):
+                    raise RuntimeError(f"Binance API error: {payload}")
+                return payload
+            except aiohttp.ClientResponseError as exc:
+                last_exc = exc
+                if exc.status not in _ASYNC_RETRY_STATUSES or attempt >= 4:
+                    break
+                await asyncio.sleep(0.35 * (2 ** attempt))
+            except (aiohttp.ClientError, TimeoutError) as exc:
+                last_exc = exc
+                if attempt >= 4:
+                    break
+                await asyncio.sleep(0.35 * (2 ** attempt))
+    finally:
+        if owns_session:
+            await session.close()
+
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("Binance API request failed")
 
 
 def _normalize_index(index: pd.Index) -> pd.DatetimeIndex:
@@ -224,17 +277,12 @@ def fetch_funding_history(
     return _records_to_series(all_data, symbol)
 
 
-def fetch_current_rates(symbols: list[str] | None = None) -> pd.DataFrame:
-    """
-    批量获取当前实时费率和下期预测（调用 premiumIndex）。
-
-    Returns:
-        DataFrame with columns:
-        symbol, mark_price, current_rate, next_rate, next_funding_time, current_ann, next_ann
-    """
-    syms = symbols or TRADFI_SYMBOLS
+def _current_rates_from_payload(
+    payload: list[dict] | dict,
+    symbols: list[str],
+) -> pd.DataFrame:
+    syms = symbols
     wanted = set(syms)
-    payload = _request_json("premiumIndex")
 
     rows = []
     if isinstance(payload, dict):
@@ -280,6 +328,33 @@ def fetch_current_rates(symbols: list[str] | None = None) -> pd.DataFrame:
 
     df = pd.DataFrame(rows).set_index("symbol")
     return df.reindex(syms)
+
+
+def fetch_current_rates(symbols: list[str] | None = None) -> pd.DataFrame:
+    """
+    批量获取当前实时费率和下期预测（同步调用 premiumIndex）。
+
+    Returns:
+        DataFrame with columns:
+        symbol, mark_price, current_rate, next_rate, next_funding_time, current_ann, next_ann
+    """
+    syms = symbols or TRADFI_SYMBOLS
+    payload = _request_json("premiumIndex")
+    return _current_rates_from_payload(payload, syms)
+
+
+async def fetch_current_rates_async(
+    symbols: list[str] | None = None,
+    session: aiohttp.ClientSession | None = None,
+) -> pd.DataFrame:
+    """
+    批量获取当前实时费率和下期预测（异步调用 premiumIndex）。
+
+    适用于实时监控、WebSocket/事件循环应用，避免网络等待阻塞主线程。
+    """
+    syms = symbols or TRADFI_SYMBOLS
+    payload = await _request_json_async("premiumIndex", session=session)
+    return _current_rates_from_payload(payload, syms)
 
 
 def load_or_fetch(symbol: str, refresh: bool = False) -> pd.Series:

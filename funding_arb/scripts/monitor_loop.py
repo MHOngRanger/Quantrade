@@ -13,6 +13,7 @@
   - Binance Production 必须对应 IBKR Live
 """
 import argparse
+import asyncio
 import os
 import sys
 from datetime import datetime, timezone
@@ -35,7 +36,7 @@ from src.execution.paper import (
     save_state,
     summarize_state,
 )
-from src.monitor.scanner import scan, load_last_snapshot, diff_snapshots
+from src.monitor.scanner import scan, scan_async, load_last_snapshot, diff_snapshots
 
 
 def _load_env() -> None:
@@ -63,6 +64,19 @@ def _validate_environment_pair(*, binance_testnet: bool, account_mode: str) -> N
         )
 
 
+def _scan_current_snapshot(*, threshold: float, verbose: bool) -> dict:
+    """CLI 路径使用异步扫描；已在事件循环内时回退到同步兼容接口。"""
+    try:
+        asyncio.get_running_loop()
+        running_loop = True
+    except RuntimeError:
+        running_loop = False
+
+    if running_loop:
+        return scan(threshold=threshold, verbose=verbose)
+    return asyncio.run(scan_async(threshold=threshold, verbose=verbose))
+
+
 def run_once(
     *,
     threshold: float = 0.0001,
@@ -82,7 +96,7 @@ def run_once(
 
     now = datetime.now(timezone.utc)
     prev = load_last_snapshot()
-    curr = scan(threshold=threshold, verbose=True)
+    curr = _scan_current_snapshot(threshold=threshold, verbose=True)
     events = diff_snapshots(prev, curr)
     if events:
         print(f"\n变动事件：")
