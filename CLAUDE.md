@@ -34,7 +34,7 @@ Quantrade/
 │   ├── 03_seasonality.ipynb          # 季节性效应（SPY）
 │   ├── 04_funding_arbitrage.ipynb    # 资金费率套利（Binance API）
 │   └── 05_market_making.ipynb        # 做市商模拟（Avellaneda-Stoikov）
-├── data/                             # 输出图表与缓存数据（已 gitignore）
+├── assets/                           # 输出图表
 ├── pyproject.toml                    # uv 依赖管理
 └── RoadmapUltimateEdition.pdf        # 参考文献
 ```

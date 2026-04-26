@@ -16,6 +16,7 @@ hedges.
 Quantrade/
 ├── main.py                         # Placeholder root entry
 ├── notebooks/                      # General strategy research notebooks
+├── assets/                         # Generated chart images
 ├── pyproject.toml                  # Root Python project config
 ├── pairs_trading/                  # Statistical arbitrage subproject
 ├── momentum/                       # Cross-sectional momentum subproject
